@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Smart Notice Board Canvas</title>
+  <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+  <style>
+    #drawing-board { border: 1px solid black; width: 512px; height: 256px; }
+  </style>
+</head>
+<body>
+  <canvas id="drawing-board" width="128" height="64"></canvas>
+  <br>
+  <button id="clear">Clear</button>
+  <button id="send">Send to Board</button>
+  <input type="file" id="upload" accept="image/*">
+  <script>
+    const canvas = document.getElementById('drawing-board');
+    const ctx = canvas.getContext('2d');
+    let isPainting = false;
+
+    // Initialize canvas to white
+    ctx.fillStyle = 'white';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.strokeStyle = 'black';
+    ctx.lineWidth = 1;
+    ctx.lineCap = 'round';
+
+    // Drawing events
+    canvas.addEventListener('mousedown', (e) => {
+      isPainting = true;
+      ctx.beginPath();
+      ctx.moveTo(e.offsetX / 4, e.offsetY / 4);  // Scale down due to CSS size
+    });
+
+    canvas.addEventListener('mouseup', () => {
+      isPainting = false;
+    });
+
+    canvas.addEventListener('mousemove', (e) => {
+      if (!isPainting) return;
+      ctx.lineTo(e.offsetX / 4, e.offsetY / 4);
+      ctx.stroke();
+    });
+
+    // Clear button
+    document.getElementById('clear').addEventListener('click', () => {
+      ctx.fillStyle = 'white';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+    });
+
+    // Upload image
+    document.getElementById('upload').addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const img = new Image();
+        img.onload = () => {
+          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        };
+        img.src = event.target.result;
+      };
+      reader.readAsDataURL(file);
+    });
+
+    // Connect to MQTT
+    const client = mqtt.connect('ws://broker.hivemq.com:8000/mqtt');
+    client.on('connect', () => {
+      console.log('Connected to MQTT broker');
+    });
+
+    // Send button
+    document.getElementById('send').addEventListener('click', () => {
+      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+      const buffer = new Uint8Array(1024);
+
+      for (let page = 0; page < 8; page++) {
+        for (let col = 0; col < 128; col++) {
+          let byte = 0;
+          for (let bit = 0; bit < 8; bit++) {
+            const row = page * 8 + bit;
+            const pixIdx = (row * 128 + col) * 4;
+            const r = imageData[pixIdx];
+            const g = imageData[pixIdx + 1];
+            const b = imageData[pixIdx + 2];
+            const a = imageData[pixIdx + 3];
+            const lum = 0.299 * r + 0.587 * g + 0.114 * b;
+            if (lum < 128 && a > 0) {
+              byte |= (1 << bit);
+            }
+          }
+          buffer[page * 128 + col] = byte;
+        }
+      }
+
+      client.publish('noticeboard/image', buffer);
+      console.log('Image sent via MQTT');
+    });
+  </script>
+</body>
+</html>
