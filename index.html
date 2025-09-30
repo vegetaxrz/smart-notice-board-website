@@ -2,45 +2,591 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Smart Notice Board Canvas</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>lab. - Smart Notice Board</title>
   <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
   <style>
-    #drawing-board { border: 1px solid black; width: 512px; height: 256px; }
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    :root {
+      --primary-orange: #FF4D1C;
+      --dark-bg: #0A0A0A;
+      --light-bg: #F5F5F5;
+      --text-dark: #1A1A1A;
+      --text-light: #FFFFFF;
+      --gray-medium: #666666;
+      --gray-light: #E0E0E0;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', sans-serif;
+      background: var(--light-bg);
+      color: var(--text-dark);
+      line-height: 1.6;
+      overflow-x: hidden;
+    }
+
+    .header {
+      background: var(--text-light);
+      border-bottom: 1px solid var(--gray-light);
+      padding: 20px 40px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+
+    .logo {
+      font-size: 32px;
+      font-weight: 300;
+      letter-spacing: -1px;
+      color: var(--text-dark);
+    }
+
+    .nav {
+      display: flex;
+      gap: 40px;
+      align-items: center;
+    }
+
+    .nav-item {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      color: var(--text-dark);
+      cursor: pointer;
+      transition: color 0.3s;
+    }
+
+    .nav-item:hover {
+      color: var(--primary-orange);
+    }
+
+    .status-indicator {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--gray-medium);
+      transition: background 0.3s;
+    }
+
+    .status-dot.active {
+      background: var(--primary-orange);
+      box-shadow: 0 0 10px var(--primary-orange);
+    }
+
+    .hero {
+      padding: 80px 40px;
+      max-width: 1400px;
+      margin: 0 auto;
+    }
+
+    .hero-title {
+      font-size: 120px;
+      font-weight: 300;
+      letter-spacing: -3px;
+      line-height: 0.9;
+      margin-bottom: 40px;
+    }
+
+    .hero-subtitle {
+      font-size: 14px;
+      color: var(--gray-medium);
+      max-width: 500px;
+      margin-bottom: 60px;
+      line-height: 1.8;
+    }
+
+    .workspace {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 60px;
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 0 40px 80px;
+    }
+
+    .canvas-section {
+      position: relative;
+    }
+
+    .section-label {
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      color: var(--gray-medium);
+      margin-bottom: 20px;
+    }
+
+    .canvas-wrapper {
+      background: var(--text-light);
+      border: 1px solid var(--gray-light);
+      border-radius: 4px;
+      padding: 40px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.05);
+      position: relative;
+    }
+
+    #drawing-board {
+      width: 100%;
+      height: auto;
+      border: 2px solid var(--text-dark);
+      cursor: crosshair;
+      background: var(--text-light);
+      display: block;
+    }
+
+    .canvas-overlay {
+      position: absolute;
+      top: 20px;
+      right: 20px;
+      background: var(--primary-orange);
+      color: var(--text-light);
+      padding: 8px 16px;
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      border-radius: 2px;
+    }
+
+    .controls-section {
+      display: flex;
+      flex-direction: column;
+      gap: 30px;
+    }
+
+    .control-group {
+      background: var(--text-light);
+      border: 1px solid var(--gray-light);
+      border-radius: 4px;
+      padding: 30px;
+    }
+
+    .control-title {
+      font-size: 16px;
+      font-weight: 500;
+      margin-bottom: 20px;
+      letter-spacing: -0.5px;
+    }
+
+    .tool-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 15px;
+    }
+
+    .tool-button {
+      background: var(--light-bg);
+      border: 1px solid var(--gray-light);
+      padding: 20px;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: all 0.3s;
+      text-align: center;
+      font-size: 13px;
+      color: var(--text-dark);
+    }
+
+    .tool-button:hover {
+      background: var(--text-dark);
+      color: var(--text-light);
+      border-color: var(--text-dark);
+    }
+
+    .tool-button.active {
+      background: var(--primary-orange);
+      color: var(--text-light);
+      border-color: var(--primary-orange);
+    }
+
+    .slider-control {
+      margin-top: 15px;
+    }
+
+    .slider-label {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 10px;
+      font-size: 12px;
+      color: var(--gray-medium);
+    }
+
+    input[type="range"] {
+      width: 100%;
+      height: 4px;
+      background: var(--gray-light);
+      outline: none;
+      border-radius: 2px;
+      -webkit-appearance: none;
+    }
+
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 16px;
+      height: 16px;
+      background: var(--text-dark);
+      cursor: pointer;
+      border-radius: 50%;
+    }
+
+    input[type="range"]::-moz-range-thumb {
+      width: 16px;
+      height: 16px;
+      background: var(--text-dark);
+      cursor: pointer;
+      border-radius: 50%;
+      border: none;
+    }
+
+    .action-button {
+      width: 100%;
+      background: var(--primary-orange);
+      color: var(--text-light);
+      border: none;
+      padding: 20px;
+      border-radius: 4px;
+      font-size: 13px;
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      cursor: pointer;
+      transition: all 0.3s;
+      font-weight: 500;
+    }
+
+    .action-button:hover {
+      background: var(--text-dark);
+      transform: translateY(-2px);
+      box-shadow: 0 8px 20px rgba(0,0,0,0.2);
+    }
+
+    .action-button:active {
+      transform: translateY(0);
+    }
+
+    .action-button.secondary {
+      background: var(--text-dark);
+      margin-bottom: 15px;
+    }
+
+    .action-button.secondary:hover {
+      background: var(--primary-orange);
+    }
+
+    input[type="file"] {
+      display: none;
+    }
+
+    .info-card {
+      background: var(--text-light);
+      border-left: 3px solid var(--primary-orange);
+      padding: 25px;
+      margin-top: 30px;
+    }
+
+    .info-title {
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      margin-bottom: 15px;
+      color: var(--text-dark);
+    }
+
+    .info-text {
+      font-size: 13px;
+      color: var(--gray-medium);
+      line-height: 1.8;
+    }
+
+    .info-list {
+      list-style: none;
+      margin-top: 15px;
+    }
+
+    .info-list li {
+      padding: 8px 0;
+      border-bottom: 1px solid var(--gray-light);
+      font-size: 13px;
+    }
+
+    .info-list li:last-child {
+      border-bottom: none;
+    }
+
+    .endpoint-display {
+      background: var(--dark-bg);
+      color: var(--text-light);
+      padding: 15px;
+      border-radius: 4px;
+      font-family: 'Courier New', monospace;
+      font-size: 11px;
+      margin-top: 15px;
+      word-break: break-all;
+      position: relative;
+    }
+
+    .copy-btn {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      background: var(--primary-orange);
+      border: none;
+      color: var(--text-light);
+      padding: 5px 10px;
+      font-size: 9px;
+      cursor: pointer;
+      border-radius: 2px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    .footer {
+      background: var(--dark-bg);
+      color: var(--text-light);
+      padding: 60px 40px;
+      margin-top: 80px;
+      text-align: center;
+    }
+
+    .footer-text {
+      font-size: 11px;
+      letter-spacing: 1px;
+      color: var(--gray-medium);
+    }
+
+    @media (max-width: 1024px) {
+      .workspace {
+        grid-template-columns: 1fr;
+      }
+
+      .hero-title {
+        font-size: 80px;
+      }
+    }
+
+    @media (max-width: 768px) {
+      .header {
+        padding: 15px 20px;
+      }
+
+      .nav {
+        gap: 20px;
+      }
+
+      .hero {
+        padding: 40px 20px;
+      }
+
+      .hero-title {
+        font-size: 60px;
+      }
+
+      .workspace {
+        padding: 0 20px 40px;
+      }
+
+      .tool-grid {
+        grid-template-columns: 1fr;
+      }
+    }
   </style>
 </head>
 <body>
-  <canvas id="drawing-board" width="128" height="64"></canvas>
-  <br>
-  <button id="clear">Clear</button>
-  <button id="send">Send to Board</button>
-  <input type="file" id="upload" accept="image/*">
+  <div class="header">
+    <div class="logo">lab.</div>
+    <div class="nav">
+      <div class="status-indicator">
+        <div class="status-dot" id="status-dot"></div>
+        <span id="status-text">MQTT CONNECTING</span>
+      </div>
+      <div class="nav-item">128x64 OLED</div>
+    </div>
+  </div>
+
+  <div class="hero">
+    <h1 class="hero-title">Smart<br>Notice<br>Board</h1>
+    <p class="hero-subtitle">
+      Create and broadcast visual content instantly to your ESP32-powered OLED display. 
+      Draw freely, upload images, or type text—all transmitted in real-time via MQTT protocol.
+    </p>
+  </div>
+
+  <div class="workspace">
+    <div class="canvas-section">
+      <div class="section-label">01 / DRAWING CANVAS</div>
+      <div class="canvas-wrapper">
+        <canvas id="drawing-board" width="128" height="64"></canvas>
+        <div class="canvas-overlay">128x64</div>
+      </div>
+
+      <div class="info-card">
+        <div class="info-title">Integration Guide</div>
+        <div class="info-text">
+          Your canvas data is automatically published to the MQTT broker. The ESP32 subscribes to this topic and renders the image on the OLED display.
+        </div>
+        <div class="endpoint-display">
+          Topic: noticeboard/image
+          <button class="copy-btn" onclick="copyTopic()">COPY</button>
+        </div>
+        <div class="endpoint-display" style="margin-top: 10px;">
+          Broker: broker.hivemq.com:1883
+          <button class="copy-btn" onclick="copyBroker()">COPY</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="controls-section">
+      <div class="control-group">
+        <div class="control-title">Drawing Tools</div>
+        <div class="tool-grid">
+          <div class="tool-button active" data-color="black">● Black Pen</div>
+          <div class="tool-button" data-color="white">○ Eraser</div>
+        </div>
+        
+        <div class="slider-control">
+          <div class="slider-label">
+            <span>Pen Size</span>
+            <span id="size-value">1px</span>
+          </div>
+          <input type="range" id="pen-size" min="1" max="8" value="1">
+        </div>
+      </div>
+
+      <div class="control-group">
+        <div class="control-title">Actions</div>
+        <label for="upload" class="action-button secondary">
+          UPLOAD IMAGE
+        </label>
+        <input type="file" id="upload" accept="image/*">
+        
+        <button class="action-button secondary" id="clear">CLEAR CANVAS</button>
+        <button class="action-button" id="send">PUBLISH TO DISPLAY</button>
+      </div>
+
+      <div class="info-card">
+        <div class="info-title">How It Works</div>
+        <ul class="info-list">
+          <li><strong>Step 1:</strong> Draw or upload your content</li>
+          <li><strong>Step 2:</strong> Click "Publish to Display"</li>
+          <li><strong>Step 3:</strong> ESP32 receives via MQTT</li>
+          <li><strong>Step 4:</strong> Content appears on OLED</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer">
+    <div class="footer-text">
+      SMART NOTICE BOARD SYSTEM · ESP32 + SSD1306 OLED · MQTT PROTOCOL · REAL-TIME COMMUNICATION
+    </div>
+  </div>
+
   <script>
+    // Canvas setup
     const canvas = document.getElementById('drawing-board');
     const ctx = canvas.getContext('2d');
     let isPainting = false;
+    let currentColor = 'black';
+    let penSize = 1;
 
-    // Initialize canvas to white
+    // Initialize white canvas
     ctx.fillStyle = 'white';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
-    ctx.strokeStyle = 'black';
-    ctx.lineWidth = 1;
+    ctx.strokeStyle = currentColor;
+    ctx.lineWidth = penSize;
     ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
 
-    // Drawing events
-    canvas.addEventListener('mousedown', (e) => {
-      isPainting = true;
-      ctx.beginPath();
-      ctx.moveTo(e.offsetX / 4, e.offsetY / 4);  // Scale down due to CSS size
+    // Drawing tools
+    document.querySelectorAll('.tool-button').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.tool-button').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        currentColor = btn.dataset.color;
+        ctx.strokeStyle = currentColor;
+      });
     });
 
-    canvas.addEventListener('mouseup', () => {
+    // Pen size control
+    const penSizeInput = document.getElementById('pen-size');
+    const sizeValueSpan = document.getElementById('size-value');
+    penSizeInput.addEventListener('input', (e) => {
+      penSize = parseInt(e.target.value);
+      ctx.lineWidth = penSize;
+      sizeValueSpan.textContent = penSize + 'px';
+    });
+
+    // Drawing functions
+    function startDrawing(x, y) {
+      isPainting = true;
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+    }
+
+    function draw(x, y) {
+      if (!isPainting) return;
+      ctx.lineTo(x, y);
+      ctx.stroke();
+    }
+
+    function stopDrawing() {
       isPainting = false;
+    }
+
+    // Mouse events
+    canvas.addEventListener('mousedown', (e) => {
+      const rect = canvas.getBoundingClientRect();
+      const x = (e.clientX - rect.left) * (canvas.width / rect.width);
+      const y = (e.clientY - rect.top) * (canvas.height / rect.height);
+      startDrawing(x, y);
     });
 
     canvas.addEventListener('mousemove', (e) => {
-      if (!isPainting) return;
-      ctx.lineTo(e.offsetX / 4, e.offsetY / 4);
-      ctx.stroke();
+      const rect = canvas.getBoundingClientRect();
+      const x = (e.clientX - rect.left) * (canvas.width / rect.width);
+      const y = (e.clientY - rect.top) * (canvas.height / rect.height);
+      draw(x, y);
+    });
+
+    canvas.addEventListener('mouseup', stopDrawing);
+    canvas.addEventListener('mouseleave', stopDrawing);
+
+    // Touch events
+    canvas.addEventListener('touchstart', (e) => {
+      e.preventDefault();
+      const rect = canvas.getBoundingClientRect();
+      const touch = e.touches[0];
+      const x = (touch.clientX - rect.left) * (canvas.width / rect.width);
+      const y = (touch.clientY - rect.top) * (canvas.height / rect.height);
+      startDrawing(x, y);
+    });
+
+    canvas.addEventListener('touchmove', (e) => {
+      e.preventDefault();
+      const rect = canvas.getBoundingClientRect();
+      const touch = e.touches[0];
+      const x = (touch.clientX - rect.left) * (canvas.width / rect.width);
+      const y = (touch.clientY - rect.top) * (canvas.height / rect.height);
+      draw(x, y);
+    });
+
+    canvas.addEventListener('touchend', (e) => {
+      e.preventDefault();
+      stopDrawing();
     });
 
     // Clear button
@@ -52,10 +598,14 @@
     // Upload image
     document.getElementById('upload').addEventListener('change', (e) => {
       const file = e.target.files[0];
+      if (!file) return;
+      
       const reader = new FileReader();
       reader.onload = (event) => {
         const img = new Image();
         img.onload = () => {
+          ctx.fillStyle = 'white';
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
           ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
         };
         img.src = event.target.result;
@@ -63,14 +613,36 @@
       reader.readAsDataURL(file);
     });
 
-    // Connect to MQTT
+    // MQTT setup
     const client = mqtt.connect('ws://broker.hivemq.com:8000/mqtt');
+    const statusDot = document.getElementById('status-dot');
+    const statusText = document.getElementById('status-text');
+
     client.on('connect', () => {
-      console.log('Connected to MQTT broker');
+      statusDot.classList.add('active');
+      statusText.textContent = 'MQTT CONNECTED';
+      console.log('✓ Connected to MQTT broker');
     });
 
-    // Send button
+    client.on('error', (error) => {
+      statusDot.classList.remove('active');
+      statusText.textContent = 'MQTT ERROR';
+      console.error('✗ MQTT Error:', error);
+    });
+
+    client.on('offline', () => {
+      statusDot.classList.remove('active');
+      statusText.textContent = 'MQTT OFFLINE';
+    });
+
+    // Send to display
     document.getElementById('send').addEventListener('click', () => {
+      if (!client.connected) {
+        alert('MQTT not connected. Please wait for connection.');
+        return;
+      }
+
+      // Convert canvas to OLED buffer format
       const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
       const buffer = new Uint8Array(1024);
 
@@ -93,9 +665,26 @@
         }
       }
 
-      client.publish('noticeboard/image', buffer);
-      console.log('Image sent via MQTT');
+      // Publish to MQTT
+      client.publish('noticeboard/image', buffer, { qos: 0 }, (err) => {
+        if (err) {
+          alert('Failed to send: ' + err.message);
+        } else {
+          alert('✓ Published successfully!\nYour image is now on the ESP32 display.');
+        }
+      });
     });
+
+    // Copy functions
+    function copyTopic() {
+      navigator.clipboard.writeText('noticeboard/image');
+      alert('Topic copied to clipboard!');
+    }
+
+    function copyBroker() {
+      navigator.clipboard.writeText('broker.hivemq.com:1883');
+      alert('Broker address copied to clipboard!');
+    }
   </script>
 </body>
 </html>
