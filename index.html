@@ -478,6 +478,16 @@
       </div>
 
       <div class="info-card">
+        <div class="info-title">Connection Status</div>
+        <div class="info-text" id="connection-info">
+          Initializing MQTT connection...
+        </div>
+        <button class="action-button secondary" id="test-connection" style="margin-top: 15px;">
+          TEST CONNECTION
+        </button>
+      </div>
+
+      <div class="info-card">
         <div class="info-title">How It Works</div>
         <ul class="info-list">
           <li><strong>Step 1:</strong> Draw or upload your content</li>
@@ -613,26 +623,103 @@
       reader.readAsDataURL(file);
     });
 
-    // MQTT setup
-    const client = mqtt.connect('ws://broker.hivemq.com:8000/mqtt');
+    // MQTT setup with improved configuration
     const statusDot = document.getElementById('status-dot');
     const statusText = document.getElementById('status-text');
+    
+    // Try multiple brokers for better reliability
+    const mqttBrokers = [
+      'wss://broker.hivemq.com:8884/mqtt',
+      'ws://broker.hivemq.com:8000/mqtt'
+    ];
+    
+    let client = null;
+    let currentBrokerIndex = 0;
+    
+    function connectMQTT() {
+      const brokerUrl = mqttBrokers[currentBrokerIndex];
+      console.log(`Attempting connection to: ${brokerUrl}`);
+      
+      const options = {
+        clientId: 'WebClient_' + Math.random().toString(16).substr(2, 8),
+        clean: true,
+        connectTimeout: 10000,
+        reconnectPeriod: 5000,
+        keepalive: 60
+      };
+      
+      client = mqtt.connect(brokerUrl, options);
+      
+      client.on('connect', () => {
+        statusDot.classList.add('active');
+        statusText.textContent = 'MQTT CONNECTED';
+        console.log('✓ Connected to MQTT broker');
+        console.log('Broker:', brokerUrl);
+        
+        // Update connection info
+        const infoDiv = document.getElementById('connection-info');
+        infoDiv.innerHTML = `
+          <strong style="color: #4CAF50;">✓ Connected & Ready</strong><br>
+          <span style="font-size: 11px; color: #666;">
+            You can now send images to the ESP32 display!
+          </span>
+        `;
+      });
 
-    client.on('connect', () => {
-      statusDot.classList.add('active');
-      statusText.textContent = 'MQTT CONNECTED';
-      console.log('✓ Connected to MQTT broker');
-    });
+      client.on('error', (error) => {
+        console.error('✗ MQTT Error:', error.message);
+        statusDot.classList.remove('active');
+        statusText.textContent = 'MQTT ERROR';
+        
+        // Try next broker after 3 seconds
+        setTimeout(() => {
+          currentBrokerIndex = (currentBrokerIndex + 1) % mqttBrokers.length;
+          if (client) {
+            client.end();
+          }
+          connectMQTT();
+        }, 3000);
+      });
 
-    client.on('error', (error) => {
-      statusDot.classList.remove('active');
-      statusText.textContent = 'MQTT ERROR';
-      console.error('✗ MQTT Error:', error);
-    });
+      client.on('offline', () => {
+        statusDot.classList.remove('active');
+        statusText.textContent = 'MQTT RECONNECTING';
+        console.log('⚠️  MQTT offline, reconnecting...');
+      });
+      
+      client.on('reconnect', () => {
+        console.log('🔄 Reconnecting to MQTT...');
+        statusText.textContent = 'MQTT RECONNECTING';
+      });
+    }
+    
+    // Start connection
+    connectMQTT();
 
-    client.on('offline', () => {
-      statusDot.classList.remove('active');
-      statusText.textContent = 'MQTT OFFLINE';
+    // Test connection button
+    document.getElementById('test-connection').addEventListener('click', () => {
+      const infoDiv = document.getElementById('connection-info');
+      
+      if (client && client.connected) {
+        infoDiv.innerHTML = `
+          <strong style="color: #4CAF50;">✓ MQTT Connected Successfully!</strong><br>
+          <span style="font-size: 11px; color: #666;">
+            Broker: ${mqttBrokers[currentBrokerIndex]}<br>
+            Client ID: ${client.options.clientId}<br>
+            Ready to send images to ESP32!
+          </span>
+        `;
+        alert('✓ Connection is working!\n\nYou can now draw and send images to the ESP32.');
+      } else {
+        infoDiv.innerHTML = `
+          <strong style="color: #f44336;">✗ Not Connected</strong><br>
+          <span style="font-size: 11px; color: #666;">
+            Trying broker: ${mqttBrokers[currentBrokerIndex]}<br>
+            Please wait or check console (F12) for errors.
+          </span>
+        `;
+        alert('⚠️ MQTT not connected yet.\n\nPlease wait a few seconds or:\n1. Check your internet\n2. Try refreshing the page\n3. Try a different browser (Chrome/Firefox)');
+      }
     });
 
     // Send to display
